@@ -12,15 +12,13 @@ const {
   removeProgramMember,
   generateRecurringSchedule,
 } = require("../controllers/programController");
-
+const { exportProgramRoster } = require("../controllers/rosterController");
 const { authenticate, authorize } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// All program routes require authentication
 router.use(authenticate);
 
-// Program CRUD
 router.post("/", authorize("coordinator"), createProgram);
 router.get("/", getPrograms);
 router.get("/:id", getProgramById);
@@ -28,7 +26,6 @@ router.patch("/:id", authorize("coordinator"), updateProgram);
 router.post("/:id/archive", authorize("coordinator"), archiveProgram);
 router.post("/:id/restore", authorize("coordinator"), restoreProgram);
 
-// Program membership
 router.get("/:programId/members", getProgramMembers);
 router.post("/:programId/members", authorize("coordinator"), addProgramMember);
 router.delete(
@@ -37,11 +34,16 @@ router.delete(
   removeProgramMember
 );
 
-// Recurring schedule generation
 router.post(
   "/:programId/shifts/recurring",
   authorize("coordinator"),
   generateRecurringSchedule
+);
+
+router.get(
+  "/:programId/roster/export",
+  authorize("coordinator"),
+  exportProgramRoster
 );
 
 module.exports = router;

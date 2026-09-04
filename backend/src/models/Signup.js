@@ -22,6 +22,7 @@ const signupSchema = new mongoose.Schema(
 
     cancelledAt: {
       type: Date,
+      default: null,
     },
   },
   {

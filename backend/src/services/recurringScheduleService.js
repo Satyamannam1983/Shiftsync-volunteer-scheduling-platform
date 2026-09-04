@@ -1,5 +1,7 @@
 const Shift = require("../models/Shift");
 const Program = require("../models/Program");
+const AppError = require("../utils/AppError");
+const { createHistoryEvent } = require("./historyService");
 
 /**
  * Generate recurring shifts for a program
@@ -17,33 +19,38 @@ const generateRecurringShifts = async (
   createdBy
 ) => {
   // Validation
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  const parseLocalDate = (value) => {
+    const [year, month, day] = String(value).slice(0, 10).split("-").map(Number);
+    return new Date(year, month - 1, day);
+  };
+
+  const start = parseLocalDate(startDate);
+  const end = parseLocalDate(endDate);
 
   if (end < start) {
-    throw new Error("End date must be after start date");
+    throw new AppError("End date must be on or after start date", 400);
   }
 
   if (dayOfWeek < 0 || dayOfWeek > 6) {
-    throw new Error("Day of week must be between 0 (Sunday) and 6 (Saturday)");
+    throw new AppError("Day of week must be between 0 (Sunday) and 6 (Saturday)", 400);
   }
 
   if (durationMinutes <= 0) {
-    throw new Error("Duration must be greater than 0");
+    throw new AppError("Duration must be greater than 0", 400);
   }
 
   if (requiredHeadcount <= 0) {
-    throw new Error("Required headcount must be greater than 0");
+    throw new AppError("Required headcount must be greater than 0", 400);
   }
 
   // Check if program exists
   const program = await Program.findById(programId);
   if (!program) {
-    throw new Error("Program not found");
+    throw new AppError("Program not found", 404);
   }
 
   if (program.archived) {
-    throw new Error("Cannot create shifts for archived programs");
+    throw new AppError("Cannot create shifts for archived programs", 400);
   }
 
   // Helper function to format date as YYYY-MM-DD
@@ -57,7 +64,7 @@ const generateRecurringShifts = async (
 
   // Parse excluded dates
   const excludedDateSet = new Set(
-    excludedDates.map((date) => formatDateKey(date))
+    excludedDates.map((date) => formatDateKey(parseLocalDate(date)))
   );
 
   // Find all matching dates
@@ -106,7 +113,7 @@ const generateRecurringShifts = async (
     // Create the shift
     const shift = await Shift.create({
       program: programId,
-      date: new Date(dateKey),
+      date: parseLocalDate(dateKey),
       startTime,
       durationMinutes,
       location: location.trim(),
@@ -114,21 +121,19 @@ const generateRecurringShifts = async (
       createdBy,
     });
 
+    await createHistoryEvent(shift._id, "SHIFT_CREATED", createdBy);
+
     created.push({
       date: dateKey,
       shiftId: shift._id,
     });
   }
 
-  // Also add excluded dates to skipped list
   for (const excludedDate of excludedDates) {
-    const date = new Date(excludedDate);
-    date.setHours(0, 0, 0, 0);
-    
+    const date = parseLocalDate(excludedDate);
     if (date >= start && date <= endDateMidnight && date.getDay() === dayOfWeek) {
       const dateKey = formatDateKey(date);
-      // Avoid duplicates in skipped list
-      if (!skipped.some(s => s.date === dateKey)) {
+      if (!skipped.some((s) => s.date === dateKey)) {
         skipped.push({
           date: dateKey,
           reason: "holiday",

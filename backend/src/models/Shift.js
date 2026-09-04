@@ -50,6 +50,11 @@ const shiftSchema = new mongoose.Schema(
     closedAt: {
       type: Date,
     },
+
+    alertCycle: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

@@ -1,90 +1,76 @@
 const Shift = require("../models/Shift");
 const Signup = require("../models/Signup");
-const Program = require("../models/Program");
+const ProgramMember = require("../models/ProgramMember");
 const { calculateShiftState } = require("../utils/stateUtils");
+const { volunteerProgramIds } = require("./shiftService");
 
-/**
- * Get dashboard summary metrics
- */
-const getDashboardSummary = async (userId, userRole) => {
-  // Calculate week start and end
-  const now = new Date();
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - now.getDay()); // Start of week (Sunday)
-  weekStart.setHours(0, 0, 0, 0);
-  
+const startOfWeek = (date) => {
+  const weekStart = new Date(date);
+  const day = weekStart.getUTCDay();
+  weekStart.setUTCDate(weekStart.getUTCDate() - day);
+  weekStart.setUTCHours(0, 0, 0, 0);
+  return weekStart;
+};
+
+const endOfWeek = (weekStart) => {
   const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  weekEnd.setHours(23, 59, 59, 999);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+  weekEnd.setUTCHours(23, 59, 59, 999);
+  return weekEnd;
+};
 
-  // Build base filter based on role
-  let programFilter = {};
+const getDashboardSummary = async (userId, userRole) => {
+  const now = new Date();
+  const weekStart = startOfWeek(now);
+  const weekEnd = endOfWeek(weekStart);
+
+  let programIds = null;
   if (userRole === "volunteer") {
-    const ProgramMember = require("../models/ProgramMember");
-    const memberPrograms = await ProgramMember.find({
-      volunteer: userId,
-    }).distinct("program");
-    
-    programFilter._id = { $in: memberPrograms };
+    programIds = await volunteerProgramIds(userId);
   }
 
-  // Get shifts this week
-  const shiftsThisWeek = await Shift.countDocuments({
-    ...programFilter,
-    date: { $gte: weekStart, $lte: weekEnd },
-  });
+  const programMatch = programIds ? { program: { $in: programIds } } : {};
 
-  // Get all shifts this week with state calculation
   const shiftsThisWeekData = await Shift.find({
-    ...programFilter,
+    ...programMatch,
     date: { $gte: weekStart, $lte: weekEnd },
   });
 
-  let openShiftsThisWeek = 0;
   const byState = { OPEN: 0, PARTIALLY_FILLED: 0, FILLED: 0, CLOSED: 0 };
+  let openShiftsThisWeek = 0;
 
   for (const shift of shiftsThisWeekData) {
     const signupCount = await Signup.countDocuments({
       shift: shift._id,
       cancelledAt: null,
     });
-
-    const state = calculateShiftState(
-      signupCount,
-      shift.requiredHeadcount,
-      shift.closed
-    );
-
-    byState[state] = (byState[state] || 0) + 1;
-
+    const state = calculateShiftState(signupCount, shift.requiredHeadcount, shift.closed);
+    byState[state] += 1;
     if (state === "OPEN" || state === "PARTIALLY_FILLED") {
-      openShiftsThisWeek++;
+      openShiftsThisWeek += 1;
     }
   }
 
-  // Get signups this week
-  const signupsThisWeek = await Signup.countDocuments({
+  const signupMatch = {
     createdAt: { $gte: weekStart, $lte: weekEnd },
     cancelledAt: null,
-  });
+  };
 
-  // Get shifts closed this week
+  if (programIds) {
+    const volunteerShifts = await Shift.find({ program: { $in: programIds } }).distinct("_id");
+    signupMatch.shift = { $in: volunteerShifts };
+  }
+
+  const signupsThisWeek = await Signup.countDocuments(signupMatch);
+
   const shiftsClosedThisWeek = await Shift.countDocuments({
-    ...programFilter,
+    ...programMatch,
     closedAt: { $gte: weekStart, $lte: weekEnd },
   });
 
-  // Get shifts by program
   const byProgram = await Shift.aggregate([
-    {
-      $match: programFilter,
-    },
-    {
-      $group: {
-        _id: "$program",
-        count: { $sum: 1 },
-      },
-    },
+    { $match: programMatch },
+    { $group: { _id: "$program", count: { $sum: 1 } } },
     {
       $lookup: {
         from: "programs",
@@ -93,54 +79,67 @@ const getDashboardSummary = async (userId, userRole) => {
         as: "program",
       },
     },
-    {
-      $unwind: "$program",
-    },
-    {
-      $project: {
-        programName: "$program.name",
-        count: 1,
-      },
-    },
-    {
-      $sort: { count: -1 },
-    },
+    { $unwind: "$program" },
+    { $project: { programName: "$program.name", count: 1 } },
+    { $sort: { count: -1 } },
   ]);
 
-  // Get signups per week for last 8 weeks
   const signupsPerWeek = [];
-  for (let i = 7; i >= 0; i--) {
-    const currentWeekStart = new Date(now);
-    currentWeekStart.setDate(now.getDate() - now.getDay() - (i * 7));
-    currentWeekStart.setHours(0, 0, 0, 0);
-    
-    const currentWeekEnd = new Date(currentWeekStart);
-    currentWeekEnd.setDate(currentWeekStart.getDate() + 6);
-    currentWeekEnd.setHours(23, 59, 59, 999);
+  for (let i = 7; i >= 0; i -= 1) {
+    const currentWeekStart = new Date(weekStart);
+    currentWeekStart.setUTCDate(weekStart.getUTCDate() - i * 7);
+    const currentWeekEnd = endOfWeek(currentWeekStart);
 
-    const weekSignups = await Signup.countDocuments({
+    const weekSignupMatch = {
       createdAt: { $gte: currentWeekStart, $lte: currentWeekEnd },
       cancelledAt: null,
-    });
+    };
+    if (signupMatch.shift) {
+      weekSignupMatch.shift = signupMatch.shift;
+    }
 
-    const weekLabel = i === 0 ? "This Week" : `${i} week${i > 1 ? 's' : ''} ago`;
+    const weekSignups = await Signup.countDocuments(weekSignupMatch);
 
     signupsPerWeek.push({
-      week: weekLabel,
+      week: i === 0 ? "This Week" : `${i} week${i > 1 ? "s" : ""} ago`,
       count: weekSignups,
       startDate: currentWeekStart.toISOString().split("T")[0],
       endDate: currentWeekEnd.toISOString().split("T")[0],
     });
   }
 
+  const upcoming = await Shift.find({
+    ...programMatch,
+    date: { $gte: now },
+    closed: false,
+  })
+    .sort({ date: 1, startTime: 1 })
+    .limit(5)
+    .populate("program", "name");
+
+  const upcomingShifts = await Promise.all(
+    upcoming.map(async (shift) => {
+      const signupCount = await Signup.countDocuments({
+        shift: shift._id,
+        cancelledAt: null,
+      });
+      return {
+        ...shift.toObject(),
+        currentSignups: signupCount,
+        state: calculateShiftState(signupCount, shift.requiredHeadcount, shift.closed),
+      };
+    })
+  );
+
   return {
-    shiftsThisWeek,
+    shiftsThisWeek: shiftsThisWeekData.length,
     openShiftsThisWeek,
     signupsThisWeek,
     shiftsClosedThisWeek,
     byState,
     byProgram,
     signupsPerWeek,
+    upcomingShifts,
   };
 };
 

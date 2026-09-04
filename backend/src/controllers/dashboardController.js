@@ -1,20 +1,19 @@
 const { getDashboardSummary } = require("../services/dashboardService");
+const asyncHandler = require("../utils/asyncHandler");
 
-const getDashboard = async (req, res) => {
-  try {
-    const summary = await getDashboardSummary(req.user.userId, req.user.role);
+const getDashboard = asyncHandler(async (req, res) => {
+  const summary = await getDashboardSummary(req.user.userId, req.user.role);
+  res.status(200).json({
+    shiftsThisWeek: summary.shiftsThisWeek,
+    openShiftsThisWeek: summary.openShiftsThisWeek,
+    signupsThisWeek: summary.signupsThisWeek,
+    closedShiftsThisWeek: summary.shiftsClosedThisWeek,
+    byState: summary.byState,
+    byProgram: summary.byProgram,
+    signupsPerWeek: summary.signupsPerWeek,
+    upcomingShifts: summary.upcomingShifts,
+    summary,
+  });
+});
 
-    res.status(200).json({
-      summary,
-    });
-  } catch (error) {
-    console.error("Get dashboard error:", error);
-    res.status(500).json({
-      message: "Server error",
-    });
-  }
-};
-
-module.exports = {
-  getDashboard,
-};
+module.exports = { getDashboard };

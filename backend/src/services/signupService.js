@@ -1,7 +1,10 @@
+const mongoose = require("mongoose");
+
 const Shift = require("../models/Shift");
 const Signup = require("../models/Signup");
 const ProgramMember = require("../models/ProgramMember");
-const mongoose = require("mongoose");
+const User = require("../models/User");
+const AppError = require("../utils/AppError");
 const { calculateShiftState } = require("../utils/stateUtils");
 const {
   getShiftDateTime,
@@ -11,236 +14,154 @@ const {
 } = require("../utils/dateUtils");
 const { createHistoryEvent } = require("./historyService");
 
-/**
- * Create a signup for a shift with transaction support for concurrency handling
- * Falls back to non-transactional logic if transactions are not available
- */
-const createSignup = async (shiftId, volunteerId, actorId, actorRole) => {
-  let session;
-  let useTransactions = false;
+const canUseTransactions = () => {
+  const type = mongoose.connection?.client?.topology?.description?.type;
+  return ["ReplicaSetWithPrimary", "ReplicaSetNoPrimary", "Sharded", "LoadBalanced"].includes(
+    type
+  );
+};
 
-  try {
-    // Try to start a session for transactions
-    session = await mongoose.startSession();
-    useTransactions = true;
-  } catch (error) {
-    console.warn("Transactions not available, using fallback logic:", error.message);
-    useTransactions = false;
+const runInTransaction = async (work) => {
+  if (!canUseTransactions()) {
+    return work(null);
   }
 
-  if (useTransactions) {
-    try {
-      session.startTransaction();
+  const session = await mongoose.startSession();
+  try {
+    let result;
+    await session.withTransaction(async () => {
+      result = await work(session);
+    });
+    return result;
+  } finally {
+    await session.endSession();
+  }
+};
 
-      // 1. Check if shift exists
-      const shift = await Shift.findById(shiftId).session(session);
-      if (!shift) {
-        throw new Error("Shift not found");
-      }
+const assertVolunteerCanSignup = (actorRole, actorId, volunteerId) => {
+  if (actorRole === "volunteer" && actorId !== volunteerId.toString()) {
+    throw new AppError("You can only sign yourself up", 403);
+  }
+};
 
-      // 2. Check if shift is closed
-      if (shift.closed) {
-        throw new Error("Cannot sign up for closed shifts");
-      }
+const createSignup = async (shiftId, volunteerId, actorId, actorRole) => {
+  assertVolunteerCanSignup(actorRole, actorId, volunteerId);
 
-      // 3. Check if shift time has passed
-      if (hasShiftTimePassed(shift.date, shift.startTime)) {
-        throw new Error("Cannot sign up for shifts that have already occurred");
-      }
+  return runInTransaction(async (session) => {
+    const query = session ? { session } : {};
 
-      // 4. Check if volunteer exists
-      const User = require("../models/User");
-      const volunteer = await User.findById(volunteerId).session(session);
-      if (!volunteer) {
-        throw new Error("Volunteer not found");
-      }
-
-      // 5. Check if volunteer belongs to the program
-      const membership = await ProgramMember.findOne({
-        program: shift.program,
-        volunteer: volunteerId,
-      }).session(session);
-
-      if (!membership) {
-        throw new Error("Volunteer does not belong to this program");
-      }
-
-      // 6. Check if volunteer already has an active signup for this shift
-      const existingSignup = await Signup.findOne({
-        shift: shiftId,
-        volunteer: volunteerId,
-        cancelledAt: null,
-      }).session(session);
-
-      if (existingSignup) {
-        throw new Error("Volunteer already has an active signup for this shift");
-      }
-
-      // 7. Check current signup count and shift state
-      const currentSignups = await Signup.countDocuments({
-        shift: shiftId,
-        cancelledAt: null,
-      }).session(session);
-
-      const currentState = calculateShiftState(currentSignups, shift.requiredHeadcount, shift.closed);
-
-      if (currentState === "FILLED") {
-        throw new Error("Shift is already filled");
-      }
-
-      // 8. Check for overlapping shifts
-      const shiftStart = getShiftDateTime(shift.date, shift.startTime);
-      const shiftEnd = getShiftEndDateTime(shiftStart, shift.durationMinutes);
-
-      const activeSignups = await Signup.find({
-        volunteer: volunteerId,
-        cancelledAt: null,
-      }).session(session).populate("shift");
-
-      for (const signup of activeSignups) {
-        const existingShift = signup.shift;
-        const existingStart = getShiftDateTime(existingShift.date, existingShift.startTime);
-        const existingEnd = getShiftEndDateTime(existingStart, existingShift.durationMinutes);
-
-        if (doTimeWindowsOverlap(shiftStart, shiftEnd, existingStart, existingEnd)) {
-          throw new Error("Volunteer already has a signup for an overlapping shift");
-        }
-      }
-
-      // 9. Create the signup
-      const signup = await Signup.create([{
-        shift: shiftId,
-        volunteer: volunteerId,
-        createdBy: actorId,
-      }], { session });
-
-      // 10. Recalculate state
-      const newSignups = currentSignups + 1;
-      const newState = calculateShiftState(newSignups, shift.requiredHeadcount, shift.closed);
-
-      // Create history events
-      await createHistoryEvent(shiftId, "SIGNUP_CREATED", actorId, {
-        volunteer: volunteerId,
-      });
-
-      if (newState !== currentState) {
-        await createHistoryEvent(shiftId, "STATE_CHANGED", actorId, {
-          oldState: currentState,
-          newState,
-        });
-      }
-
-      await session.commitTransaction();
-
-      return {
-        signup: signup[0],
-        previousState: currentState,
-        newState,
-      };
-    } catch (error) {
-      await session.abortTransaction();
-      throw error;
-    } finally {
-      await session.endSession();
-    }
-  } else {
-    // Fallback logic without transactions
-    // 1. Check if shift exists
-    const shift = await Shift.findById(shiftId);
+    const shift = await Shift.findById(shiftId).session(session || null);
     if (!shift) {
-      throw new Error("Shift not found");
+      throw new AppError("Shift not found", 404);
     }
 
-    // 2. Check if shift is closed
     if (shift.closed) {
-      throw new Error("Cannot sign up for closed shifts");
+      throw new AppError("Shift is closed.", 400);
     }
 
-    // 3. Check if shift time has passed
     if (hasShiftTimePassed(shift.date, shift.startTime)) {
-      throw new Error("Cannot sign up for shifts that have already occurred");
+      throw new AppError("Cannot sign up for shifts that have already occurred", 400);
     }
 
-    // 4. Check if volunteer exists
-    const User = require("../models/User");
-    const volunteer = await User.findById(volunteerId);
+    const volunteer = await User.findById(volunteerId).session(session || null);
     if (!volunteer) {
-      throw new Error("Volunteer not found");
+      throw new AppError("Volunteer not found", 404);
     }
 
-    // 5. Check if volunteer belongs to the program
     const membership = await ProgramMember.findOne({
       program: shift.program,
       volunteer: volunteerId,
-    });
+    }).session(session || null);
 
     if (!membership) {
-      throw new Error("Volunteer does not belong to this program");
+      throw new AppError("Volunteer does not belong to this program.", 400);
     }
 
-    // 6. Check if volunteer already has an active signup for this shift
     const existingSignup = await Signup.findOne({
       shift: shiftId,
       volunteer: volunteerId,
       cancelledAt: null,
-    });
+    }).session(session || null);
 
     if (existingSignup) {
-      throw new Error("Volunteer already has an active signup for this shift");
+      throw new AppError("Volunteer already has an active signup for this shift", 409);
     }
 
-    // 7. Check current signup count and shift state
-    const currentSignups = await Signup.countDocuments({
-      shift: shiftId,
-      cancelledAt: null,
-    });
+    const currentSignups = await Signup.countDocuments(
+      { shift: shiftId, cancelledAt: null },
+      query
+    );
 
-    const currentState = calculateShiftState(currentSignups, shift.requiredHeadcount, shift.closed);
+    const currentState = calculateShiftState(
+      currentSignups,
+      shift.requiredHeadcount,
+      shift.closed
+    );
 
     if (currentState === "FILLED") {
-      throw new Error("Shift is already filled");
+      throw new AppError("Shift is already filled.", 400);
     }
 
-    // 8. Check for overlapping shifts
     const shiftStart = getShiftDateTime(shift.date, shift.startTime);
     const shiftEnd = getShiftEndDateTime(shiftStart, shift.durationMinutes);
 
     const activeSignups = await Signup.find({
       volunteer: volunteerId,
       cancelledAt: null,
-    }).populate("shift");
+    })
+      .session(session || null)
+      .populate("shift");
 
     for (const signup of activeSignups) {
       const existingShift = signup.shift;
+      if (!existingShift) continue;
+
       const existingStart = getShiftDateTime(existingShift.date, existingShift.startTime);
       const existingEnd = getShiftEndDateTime(existingStart, existingShift.durationMinutes);
 
       if (doTimeWindowsOverlap(shiftStart, shiftEnd, existingStart, existingEnd)) {
-        throw new Error("Volunteer already has a signup for an overlapping shift");
+        throw new AppError("You already have a signup for an overlapping shift.", 409);
       }
     }
 
-    // 9. Create the signup
-    const signup = await Signup.create({
-      shift: shiftId,
-      volunteer: volunteerId,
-      createdBy: actorId,
-    });
+    const [createdSignup] = session
+      ? await Signup.create(
+          [
+            {
+              shift: shiftId,
+              volunteer: volunteerId,
+              createdBy: actorId,
+            },
+          ],
+          { session }
+        )
+      : [await Signup.create({
+          shift: shiftId,
+          volunteer: volunteerId,
+          createdBy: actorId,
+        })];
 
-    // 10. Recalculate state
+    const signup = createdSignup;
+
     const newSignups = currentSignups + 1;
     const newState = calculateShiftState(newSignups, shift.requiredHeadcount, shift.closed);
 
-    // Create history events
-    await createHistoryEvent(shiftId, "SIGNUP_CREATED", actorId, {
-      volunteer: volunteerId,
-    });
+    await createHistoryEvent(
+      shiftId,
+      "SIGNUP_CREATED",
+      actorId,
+      { volunteer: volunteerId, action: "signup" },
+      session
+    );
 
     if (newState !== currentState) {
-      await createHistoryEvent(shiftId, "STATE_CHANGED", actorId, {
-        oldState: currentState,
-        newState,
-      });
+      await createHistoryEvent(
+        shiftId,
+        "STATE_CHANGED",
+        actorId,
+        { oldState: currentState, newState },
+        session
+      );
     }
 
     return {
@@ -248,153 +169,77 @@ const createSignup = async (shiftId, volunteerId, actorId, actorRole) => {
       previousState: currentState,
       newState,
     };
-  }
+  });
 };
 
-/**
- * Cancel a signup with transaction support
- * Falls back to non-transactional logic if transactions are not available
- */
 const cancelSignup = async (signupId, actorId, actorRole) => {
-  let session;
-  let useTransactions = false;
-
-  try {
-    // Try to start a session for transactions
-    session = await mongoose.startSession();
-    useTransactions = true;
-  } catch (error) {
-    console.warn("Transactions not available, using fallback logic:", error.message);
-    useTransactions = false;
-  }
-
-  if (useTransactions) {
-    try {
-      session.startTransaction();
-
-      // 1. Check if signup exists
-      const signup = await Signup.findById(signupId).session(session);
-      if (!signup) {
-        throw new Error("Signup not found");
-      }
-
-      // 2. Check if already cancelled
-      if (signup.cancelledAt) {
-        throw new Error("Signup is already cancelled");
-      }
-
-      // 3. Get shift details
-      const shift = await Shift.findById(signup.shift).session(session);
-      if (!shift) {
-        throw new Error("Shift not found");
-      }
-
-      // 4. Check if shift is closed
-      if (shift.closed) {
-        throw new Error("Cannot cancel signup for closed shifts");
-      }
-
-      // 5. Check if shift time has passed
-      if (hasShiftTimePassed(shift.date, shift.startTime)) {
-        throw new Error("Cannot cancel signup for shifts that have already occurred");
-      }
-
-      // 6. Get current signup count before cancellation
-      const currentSignups = await Signup.countDocuments({
-        shift: shift._id,
-        cancelledAt: null,
-      }).session(session);
-
-      const currentState = calculateShiftState(currentSignups, shift.requiredHeadcount, shift.closed);
-
-      // 7. Cancel the signup
-      signup.cancelledAt = new Date();
-      await signup.save({ session });
-
-      // 8. Recalculate state
-      const newSignups = currentSignups - 1;
-      const newState = calculateShiftState(newSignups, shift.requiredHeadcount, shift.closed);
-
-      // Create history events
-      await createHistoryEvent(shift._id, "SIGNUP_CANCELLED", actorId, {
-        volunteer: signup.volunteer,
-      });
-
-      if (newState !== currentState) {
-        await createHistoryEvent(shift._id, "STATE_CHANGED", actorId, {
-          oldState: currentState,
-          newState,
-        });
-      }
-
-      await session.commitTransaction();
-
-      return {
-        signup,
-        previousState: currentState,
-        newState,
-      };
-    } catch (error) {
-      await session.abortTransaction();
-      throw error;
-    } finally {
-      await session.endSession();
-    }
-  } else {
-    // Fallback logic without transactions
-    // 1. Check if signup exists
-    const signup = await Signup.findById(signupId);
+  return runInTransaction(async (session) => {
+    const signup = await Signup.findById(signupId).session(session || null);
     if (!signup) {
-      throw new Error("Signup not found");
+      throw new AppError("Signup not found", 404);
     }
 
-    // 2. Check if already cancelled
     if (signup.cancelledAt) {
-      throw new Error("Signup is already cancelled");
+      throw new AppError("Signup is already cancelled", 400);
     }
 
-    // 3. Get shift details
-    const shift = await Shift.findById(signup.shift);
+    if (actorRole === "volunteer" && signup.volunteer.toString() !== actorId) {
+      throw new AppError("You can only cancel your own signups", 403);
+    }
+
+    const shift = await Shift.findById(signup.shift).session(session || null);
     if (!shift) {
-      throw new Error("Shift not found");
+      throw new AppError("Shift not found", 404);
     }
 
-    // 4. Check if shift is closed
     if (shift.closed) {
-      throw new Error("Cannot cancel signup for closed shifts");
+      throw new AppError("Cannot cancel a signup on a closed shift.", 400);
     }
 
-    // 5. Check if shift time has passed
     if (hasShiftTimePassed(shift.date, shift.startTime)) {
-      throw new Error("Cannot cancel signup for shifts that have already occurred");
+      throw new AppError("Cannot cancel signup for shifts that have already occurred", 400);
     }
 
-    // 6. Get current signup count before cancellation
-    const currentSignups = await Signup.countDocuments({
-      shift: shift._id,
-      cancelledAt: null,
-    });
+    const currentSignups = await Signup.countDocuments(
+      { shift: shift._id, cancelledAt: null },
+      session ? { session } : {}
+    );
+    const currentState = calculateShiftState(
+      currentSignups,
+      shift.requiredHeadcount,
+      shift.closed
+    );
 
-    const currentState = calculateShiftState(currentSignups, shift.requiredHeadcount, shift.closed);
-
-    // 7. Cancel the signup
     signup.cancelledAt = new Date();
-    await signup.save();
+    await signup.save(session ? { session } : {});
 
-    // 8. Recalculate state
     const newSignups = currentSignups - 1;
     const newState = calculateShiftState(newSignups, shift.requiredHeadcount, shift.closed);
 
-    // Create history events
-    await createHistoryEvent(shift._id, "SIGNUP_CANCELLED", actorId, {
-      volunteer: signup.volunteer,
-    });
+    await createHistoryEvent(
+      shift._id,
+      "SIGNUP_CANCELLED",
+      actorId,
+      { volunteer: signup.volunteer, action: "cancel" },
+      session
+    );
 
     if (newState !== currentState) {
-      await createHistoryEvent(shift._id, "STATE_CHANGED", actorId, {
-        oldState: currentState,
-        newState,
-      });
+      await createHistoryEvent(
+        shift._id,
+        "STATE_CHANGED",
+        actorId,
+        { oldState: currentState, newState },
+        session
+      );
+
+      if (
+        currentState === "FILLED" &&
+        (newState === "OPEN" || newState === "PARTIALLY_FILLED")
+      ) {
+        shift.alertCycle = (shift.alertCycle || 0) + 1;
+        await shift.save(session ? { session } : {});
+      }
     }
 
     return {
@@ -402,10 +247,11 @@ const cancelSignup = async (signupId, actorId, actorRole) => {
       previousState: currentState,
       newState,
     };
-  }
+  });
 };
 
 module.exports = {
   createSignup,
   cancelSignup,
+  canUseTransactions,
 };

@@ -1,180 +1,110 @@
 const { createSignup, cancelSignup } = require("../services/signupService");
 const Signup = require("../models/Signup");
 const Shift = require("../models/Shift");
+const ProgramMember = require("../models/ProgramMember");
 const { calculateShiftState } = require("../utils/stateUtils");
+const asyncHandler = require("../utils/asyncHandler");
+const AppError = require("../utils/AppError");
 
-const createShiftSignup = async (req, res) => {
-  try {
-    const { shiftId } = req.params;
-    const { volunteerId } = req.body;
+const createShiftSignup = asyncHandler(async (req, res) => {
+  const { shiftId } = req.params;
+  const { volunteerId } = req.body;
 
-    // Determine volunteer ID based on role
-    let targetVolunteerId;
-    if (req.user.role === "coordinator" && volunteerId) {
-      targetVolunteerId = volunteerId;
-    } else if (req.user.role === "volunteer") {
-      targetVolunteerId = req.user.userId;
-    } else {
-      return res.status(400).json({
-        message: "Invalid request",
-      });
+  let targetVolunteerId;
+  if (req.user.role === "coordinator") {
+    if (!volunteerId) {
+      throw new AppError("volunteerId is required when a coordinator creates a signup", 400);
     }
-
-    // Create signup using service
-    const result = await createSignup(
-      shiftId,
-      targetVolunteerId,
-      req.user.userId,
-      req.user.role
-    );
-
-    await result.signup.populate("volunteer", "name email");
-    await result.signup.populate("shift", "date startTime location");
-
-    res.status(201).json({
-      message: "Signup created successfully",
-      signup: result.signup,
-      stateChange: {
-        previous: result.previousState,
-        new: result.newState,
-      },
-    });
-  } catch (error) {
-    console.error("Create signup error:", error);
-
-    // Handle specific error messages
-    if (error.message.includes("not found")) {
-      return res.status(404).json({
-        message: error.message,
-      });
+    targetVolunteerId = volunteerId;
+  } else if (req.user.role === "volunteer") {
+    if (volunteerId && volunteerId !== req.user.userId) {
+      throw new AppError("You can only sign yourself up", 403);
     }
-
-    if (error.message.includes("already") || error.message.includes("overlap")) {
-      return res.status(409).json({
-        message: error.message,
-      });
-    }
-
-    if (error.message.includes("filled") || error.message.includes("closed") || error.message.includes("already occurred")) {
-      return res.status(400).json({
-        message: error.message,
-      });
-    }
-
-    res.status(500).json({
-      message: "Server error",
-    });
+    targetVolunteerId = req.user.userId;
+  } else {
+    throw new AppError("Invalid request", 400);
   }
-};
 
-const cancelShiftSignup = async (req, res) => {
-  try {
-    const { shiftId, signupId } = req.params;
+  const result = await createSignup(shiftId, targetVolunteerId, req.user.userId, req.user.role);
 
-    // Get signup to check ownership
-    const signup = await Signup.findById(signupId);
-    if (!signup) {
-      return res.status(404).json({
-        message: "Signup not found",
-      });
-    }
+  await result.signup.populate("volunteer", "name email");
+  await result.signup.populate("shift", "date startTime location");
 
-    // Check authorization
-    if (req.user.role === "volunteer" && signup.volunteer.toString() !== req.user.userId) {
-      return res.status(403).json({
-        message: "You can only cancel your own signups",
-      });
-    }
+  res.status(201).json({
+    message: "Signup created successfully",
+    signup: result.signup,
+    stateChange: {
+      previous: result.previousState,
+      new: result.newState,
+    },
+  });
+});
 
-    // Cancel signup using service
-    const result = await cancelSignup(signupId, req.user.userId, req.user.role);
+const cancelShiftSignup = asyncHandler(async (req, res) => {
+  const { signupId } = req.params;
+  const result = await cancelSignup(signupId, req.user.userId, req.user.role);
 
-    await result.signup.populate("volunteer", "name email");
-    await result.signup.populate("shift", "date startTime location");
+  await result.signup.populate("volunteer", "name email");
+  await result.signup.populate("shift", "date startTime location");
 
-    res.status(200).json({
-      message: "Signup cancelled successfully",
-      signup: result.signup,
-      stateChange: {
-        previous: result.previousState,
-        new: result.newState,
-      },
-    });
-  } catch (error) {
-    console.error("Cancel signup error:", error);
+  res.status(200).json({
+    message: "Signup cancelled successfully",
+    signup: result.signup,
+    stateChange: {
+      previous: result.previousState,
+      new: result.newState,
+    },
+  });
+});
 
-    // Handle specific error messages
-    if (error.message.includes("not found")) {
-      return res.status(404).json({
-        message: error.message,
-      });
-    }
-
-    if (error.message.includes("already cancelled")) {
-      return res.status(400).json({
-        message: error.message,
-      });
-    }
-
-    if (error.message.includes("closed") || error.message.includes("already occurred")) {
-      return res.status(400).json({
-        message: error.message,
-      });
-    }
-
-    res.status(500).json({
-      message: "Server error",
-    });
+const getShiftSignups = asyncHandler(async (req, res) => {
+  const { shiftId } = req.params;
+  const shift = await Shift.findById(shiftId);
+  if (!shift) {
+    throw new AppError("Shift not found", 404);
   }
-};
 
-const getShiftSignups = async (req, res) => {
-  try {
-    const { shiftId } = req.params;
-
-    const shift = await Shift.findById(shiftId);
-    if (!shift) {
-      return res.status(404).json({
-        message: "Shift not found",
-      });
+  if (req.user.role === "volunteer") {
+    const membership = await ProgramMember.findOne({
+      program: shift.program,
+      volunteer: req.user.userId,
+    });
+    if (!membership) {
+      throw new AppError("You do not have access to this shift", 403);
     }
+  }
 
-    // Volunteers can only see signups for shifts in their programs
-    if (req.user.role === "volunteer") {
-      const ProgramMember = require("../models/ProgramMember");
-      const membership = await ProgramMember.findOne({
-        program: shift.program,
-        volunteer: req.user.userId,
-      });
+  const signups = await Signup.find({
+    shift: shiftId,
+    cancelledAt: null,
+  })
+    .populate("volunteer", "name email")
+    .populate("createdBy", "name email")
+    .sort({ createdAt: -1 });
 
-      if (!membership) {
-        return res.status(403).json({
-          message: "You do not have access to this shift",
-        });
-      }
-    }
+  const signupCount = signups.length;
+  const state = calculateShiftState(signupCount, shift.requiredHeadcount, shift.closed);
 
-    const signups = await Signup.find({
-      shift: shiftId,
-      cancelledAt: null,
+  res.status(200).json({ signups, currentSignups: signupCount, state });
+});
+
+const getMySignups = asyncHandler(async (req, res) => {
+  const signups = await Signup.find({
+    volunteer: req.user.userId,
+    cancelledAt: null,
+  })
+    .populate({
+      path: "shift",
+      populate: { path: "program", select: "name archived" },
     })
-      .populate("volunteer", "name email")
-      .populate("createdBy", "name email")
-      .sort({ createdAt: -1 });
+    .sort({ createdAt: -1 });
 
-    res.status(200).json({
-      signups,
-    });
-  } catch (error) {
-    console.error("Get shift signups error:", error);
-    res.status(500).json({
-      message: "Server error",
-    });
-  }
-};
+  res.status(200).json({ signups });
+});
 
 module.exports = {
   createShiftSignup,
   cancelShiftSignup,
   getShiftSignups,
+  getMySignups,
 };

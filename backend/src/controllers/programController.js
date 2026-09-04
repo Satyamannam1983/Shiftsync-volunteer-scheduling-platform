@@ -1,390 +1,256 @@
 const Program = require("../models/Program");
 const ProgramMember = require("../models/ProgramMember");
 const User = require("../models/User");
+const Signup = require("../models/Signup");
 const { generateRecurringShifts } = require("../services/recurringScheduleService");
+const { hasShiftTimePassed } = require("../utils/dateUtils");
+const { cancelSignup } = require("../services/signupService");
+const asyncHandler = require("../utils/asyncHandler");
+const AppError = require("../utils/AppError");
 
-const createProgram = async (req, res) => {
-  try {
-    const { name, description } = req.body;
-
-    if (!name) {
-      return res.status(400).json({
-        message: "Program name is required",
-      });
-    }
-
-    const program = await Program.create({
-      name: name.trim(),
-      description: description?.trim() || "",
-      createdBy: req.user.userId,
-    });
-
-    res.status(201).json({
-      message: "Program created successfully",
-      program,
-    });
-  } catch (error) {
-    console.error("Create program error:", error);
-    res.status(500).json({
-      message: "Server error",
-    });
+const createProgram = asyncHandler(async (req, res) => {
+  const { name, description } = req.body;
+  if (!name) {
+    throw new AppError("Program name is required", 400);
   }
-};
 
-const getPrograms = async (req, res) => {
-  try {
-    const { archived } = req.query;
+  const program = await Program.create({
+    name: name.trim(),
+    description: description?.trim() || "",
+    createdBy: req.user.userId,
+  });
 
-    const filter = {};
-    
-    // Volunteers can only see active programs they belong to
-    if (req.user.role === "volunteer") {
-      const memberPrograms = await ProgramMember.find({
-        volunteer: req.user.userId,
-      }).distinct("program");
-      
-      filter._id = { $in: memberPrograms };
-      filter.archived = false;
-    } else {
-      // Coordinators can see all programs, optionally filtered by archived status
-      if (archived !== undefined) {
-        filter.archived = archived === "true";
-      }
-    }
+  res.status(201).json({ message: "Program created successfully", program });
+});
 
-    const programs = await Program.find(filter)
-      .populate("createdBy", "name email")
-      .sort({ createdAt: -1 });
+const getPrograms = asyncHandler(async (req, res) => {
+  const { archived } = req.query;
+  const filter = {};
 
-    res.status(200).json({
-      programs,
-    });
-  } catch (error) {
-    console.error("Get programs error:", error);
-    res.status(500).json({
-      message: "Server error",
-    });
+  if (req.user.role === "volunteer") {
+    const memberPrograms = await ProgramMember.find({
+      volunteer: req.user.userId,
+    }).distinct("program");
+    filter._id = { $in: memberPrograms };
+    filter.archived = false;
+  } else if (archived === "all") {
+    // no archived filter
+  } else if (archived !== undefined) {
+    filter.archived = archived === "true";
+  } else {
+    filter.archived = false;
   }
-};
 
-const getProgramById = async (req, res) => {
-  try {
-    const { id } = req.params;
+  const programs = await Program.find(filter)
+    .populate("createdBy", "name email")
+    .sort({ createdAt: -1 });
 
-    const program = await Program.findById(id).populate(
-      "createdBy",
-      "name email"
-    );
+  res.status(200).json({ programs });
+});
 
-    if (!program) {
-      return res.status(404).json({
-        message: "Program not found",
-      });
-    }
-
-    // Volunteers can only view programs they belong to
-    if (req.user.role === "volunteer") {
-      const membership = await ProgramMember.findOne({
-        program: id,
-        volunteer: req.user.userId,
-      });
-
-      if (!membership) {
-        return res.status(403).json({
-          message: "You do not have access to this program",
-        });
-      }
-
-      // Volunteers cannot see archived programs
-      if (program.archived) {
-        return res.status(403).json({
-          message: "This program is archived",
-        });
-      }
-    }
-
-    res.status(200).json({
-      program,
-    });
-  } catch (error) {
-    console.error("Get program error:", error);
-    res.status(500).json({
-      message: "Server error",
-    });
+const getProgramById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const program = await Program.findById(id).populate("createdBy", "name email");
+  if (!program) {
+    throw new AppError("Program not found", 404);
   }
-};
 
-const updateProgram = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, description } = req.body;
-
-    const program = await Program.findById(id);
-
-    if (!program) {
-      return res.status(404).json({
-        message: "Program not found",
-      });
+  if (req.user.role === "volunteer") {
+    const membership = await ProgramMember.findOne({
+      program: id,
+      volunteer: req.user.userId,
+    });
+    if (!membership || program.archived) {
+      throw new AppError("You do not have access to this program", 403);
     }
-
-    // Only allow updating name and description
-    if (name) program.name = name.trim();
-    if (description !== undefined) program.description = description.trim();
-
-    await program.save();
-
-    res.status(200).json({
-      message: "Program updated successfully",
-      program,
-    });
-  } catch (error) {
-    console.error("Update program error:", error);
-    res.status(500).json({
-      message: "Server error",
-    });
   }
-};
 
-const archiveProgram = async (req, res) => {
-  try {
-    const { id } = req.params;
+  res.status(200).json({ program });
+});
 
-    const program = await Program.findById(id);
-
-    if (!program) {
-      return res.status(404).json({
-        message: "Program not found",
-      });
-    }
-
-    if (program.archived) {
-      return res.status(400).json({
-        message: "Program is already archived",
-      });
-    }
-
-    program.archived = true;
-    await program.save();
-
-    res.status(200).json({
-      message: "Program archived successfully",
-      program,
-    });
-  } catch (error) {
-    console.error("Archive program error:", error);
-    res.status(500).json({
-      message: "Server error",
-    });
+const updateProgram = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { name, description } = req.body;
+  const program = await Program.findById(id);
+  if (!program) {
+    throw new AppError("Program not found", 404);
   }
-};
 
-const restoreProgram = async (req, res) => {
-  try {
-    const { id } = req.params;
+  if (name) program.name = name.trim();
+  if (description !== undefined) program.description = description.trim();
+  await program.save();
 
-    const program = await Program.findById(id);
+  res.status(200).json({ message: "Program updated successfully", program });
+});
 
-    if (!program) {
-      return res.status(404).json({
-        message: "Program not found",
-      });
-    }
-
-    if (!program.archived) {
-      return res.status(400).json({
-        message: "Program is not archived",
-      });
-    }
-
-    program.archived = false;
-    await program.save();
-
-    res.status(200).json({
-      message: "Program restored successfully",
-      program,
-    });
-  } catch (error) {
-    console.error("Restore program error:", error);
-    res.status(500).json({
-      message: "Server error",
-    });
+const archiveProgram = asyncHandler(async (req, res) => {
+  const program = await Program.findById(req.params.id);
+  if (!program) {
+    throw new AppError("Program not found", 404);
   }
-};
-
-const getProgramMembers = async (req, res) => {
-  try {
-    const { programId } = req.params;
-
-    const program = await Program.findById(programId);
-
-    if (!program) {
-      return res.status(404).json({
-        message: "Program not found",
-      });
-    }
-
-    const members = await ProgramMember.find({ program: programId })
-      .populate("volunteer", "name email")
-      .populate("addedBy", "name email")
-      .sort({ createdAt: -1 });
-
-    res.status(200).json({
-      members,
-    });
-  } catch (error) {
-    console.error("Get program members error:", error);
-    res.status(500).json({
-      message: "Server error",
-    });
+  if (program.archived) {
+    throw new AppError("Program is already archived", 400);
   }
-};
 
-const addProgramMember = async (req, res) => {
+  program.archived = true;
+  await program.save();
+  res.status(200).json({ message: "Program archived successfully", program });
+});
+
+const restoreProgram = asyncHandler(async (req, res) => {
+  const program = await Program.findById(req.params.id);
+  if (!program) {
+    throw new AppError("Program not found", 404);
+  }
+  if (!program.archived) {
+    throw new AppError("Program is not archived", 400);
+  }
+
+  program.archived = false;
+  await program.save();
+  res.status(200).json({ message: "Program restored successfully", program });
+});
+
+const getProgramMembers = asyncHandler(async (req, res) => {
+  const { programId } = req.params;
+  const program = await Program.findById(programId);
+  if (!program) {
+    throw new AppError("Program not found", 404);
+  }
+
+  if (req.user.role === "volunteer") {
+    const membership = await ProgramMember.findOne({
+      program: programId,
+      volunteer: req.user.userId,
+    });
+    if (!membership) {
+      throw new AppError("You do not have access to this program", 403);
+    }
+  }
+
+  const members = await ProgramMember.find({ program: programId })
+    .populate("volunteer", "name email")
+    .populate("addedBy", "name email")
+    .sort({ createdAt: -1 });
+
+  res.status(200).json({ members });
+});
+
+const addProgramMember = asyncHandler(async (req, res) => {
+  const { programId } = req.params;
+  const { volunteerId } = req.body;
+  if (!volunteerId) {
+    throw new AppError("Volunteer ID is required", 400);
+  }
+
+  const program = await Program.findById(programId);
+  if (!program) {
+    throw new AppError("Program not found", 404);
+  }
+
+  const volunteer = await User.findById(volunteerId);
+  if (!volunteer) {
+    throw new AppError("Volunteer not found", 404);
+  }
+  if (volunteer.role !== "volunteer") {
+    throw new AppError("Can only add volunteers to programs", 400);
+  }
+
   try {
-    const { programId } = req.params;
-    const { volunteerId } = req.body;
-
-    if (!volunteerId) {
-      return res.status(400).json({
-        message: "Volunteer ID is required",
-      });
-    }
-
-    const program = await Program.findById(programId);
-
-    if (!program) {
-      return res.status(404).json({
-        message: "Program not found",
-      });
-    }
-
-    const volunteer = await User.findById(volunteerId);
-
-    if (!volunteer) {
-      return res.status(404).json({
-        message: "Volunteer not found",
-      });
-    }
-
-    if (volunteer.role !== "volunteer") {
-      return res.status(400).json({
-        message: "Can only add volunteers to programs",
-      });
-    }
-
     const member = await ProgramMember.create({
       program: programId,
       volunteer: volunteerId,
       addedBy: req.user.userId,
     });
-
     await member.populate("volunteer", "name email");
     await member.populate("addedBy", "name email");
-
-    res.status(201).json({
-      message: "Member added successfully",
-      member,
-    });
+    res.status(201).json({ message: "Member added successfully", member });
   } catch (error) {
-    console.error("Add program member error:", error);
-
     if (error.code === 11000) {
-      return res.status(409).json({
-        message: "Volunteer is already a member of this program",
-      });
+      throw new AppError("Volunteer is already a member of this program", 409);
     }
-
-    res.status(500).json({
-      message: "Server error",
-    });
+    throw error;
   }
-};
+});
 
-const removeProgramMember = async (req, res) => {
-  try {
-    const { programId, volunteerId } = req.params;
-
-    const member = await ProgramMember.findOne({
-      program: programId,
-      volunteer: volunteerId,
-    });
-
-    if (!member) {
-      return res.status(404).json({
-        message: "Membership not found",
-      });
-    }
-
-    await member.deleteOne();
-
-    res.status(200).json({
-      message: "Member removed successfully",
-    });
-  } catch (error) {
-    console.error("Remove program member error:", error);
-    res.status(500).json({
-      message: "Server error",
-    });
+const removeProgramMember = asyncHandler(async (req, res) => {
+  const { programId, volunteerId } = req.params;
+  const member = await ProgramMember.findOne({
+    program: programId,
+    volunteer: volunteerId,
+  });
+  if (!member) {
+    throw new AppError("Membership not found", 404);
   }
-};
 
-const generateRecurringSchedule = async (req, res) => {
-  try {
-    const { programId } = req.params;
-    const {
-      startDate,
-      endDate,
-      dayOfWeek,
-      startTime,
-      durationMinutes,
-      location,
-      requiredHeadcount,
-      excludedDates = [],
-    } = req.body;
+  await member.deleteOne();
 
-    if (!startDate || !endDate || !dayOfWeek || !startTime || !durationMinutes || !location || !requiredHeadcount) {
-      return res.status(400).json({
-        message: "All recurring schedule fields are required",
-      });
+  const activeSignups = await Signup.find({
+    volunteer: volunteerId,
+    cancelledAt: null,
+  }).populate("shift");
+
+  let cancelledFutureSignups = 0;
+  for (const signup of activeSignups) {
+    if (!signup.shift || signup.shift.program.toString() !== programId) {
+      continue;
     }
-
-    const result = await generateRecurringShifts(
-      programId,
-      startDate,
-      endDate,
-      dayOfWeek,
-      startTime,
-      durationMinutes,
-      location,
-      requiredHeadcount,
-      excludedDates,
-      req.user.userId
-    );
-
-    res.status(200).json({
-      message: "Recurring schedule generated successfully",
-      ...result,
-    });
-  } catch (error) {
-    console.error("Generate recurring schedule error:", error);
-
-    if (error.message.includes("not found")) {
-      return res.status(404).json({
-        message: error.message,
-      });
+    if (!hasShiftTimePassed(signup.shift.date, signup.shift.startTime) && !signup.shift.closed) {
+      await cancelSignup(signup._id, req.user.userId, "coordinator");
+      cancelledFutureSignups += 1;
     }
-
-    if (error.message.includes("archived") || error.message.includes("must be")) {
-      return res.status(400).json({
-        message: error.message,
-      });
-    }
-
-    res.status(500).json({
-      message: "Server error",
-    });
   }
-};
+
+  res.status(200).json({
+    message: "Member removed successfully",
+    cancelledFutureSignups,
+    note: "Historical signup records were preserved. Future active signups were cancelled so the volunteer no longer occupies upcoming shifts.",
+  });
+});
+
+const generateRecurringSchedule = asyncHandler(async (req, res) => {
+  const { programId } = req.params;
+  const {
+    startDate,
+    endDate,
+    dayOfWeek,
+    startTime,
+    durationMinutes,
+    location,
+    requiredHeadcount,
+    excludedDates = [],
+  } = req.body;
+
+  if (
+    !startDate ||
+    !endDate ||
+    dayOfWeek === undefined ||
+    !startTime ||
+    !durationMinutes ||
+    !location ||
+    !requiredHeadcount
+  ) {
+    throw new AppError("All recurring schedule fields are required", 400);
+  }
+
+  const result = await generateRecurringShifts(
+    programId,
+    startDate,
+    endDate,
+    Number(dayOfWeek),
+    startTime,
+    durationMinutes,
+    location,
+    requiredHeadcount,
+    excludedDates,
+    req.user.userId
+  );
+
+  res.status(200).json({
+    message: "Recurring schedule generated successfully",
+    ...result,
+  });
+});
 
 module.exports = {
   createProgram,
