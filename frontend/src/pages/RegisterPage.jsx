@@ -27,17 +27,17 @@ export default function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center p-4">
       <form onSubmit={onSubmit} className="w-full max-w-md rounded-2xl bg-white p-8 shadow">
         <h1 className="text-2xl font-semibold">Create account</h1>
-        <p className="mt-1 text-sm text-slate-500">Sign up as a Volunteer or Coordinator</p>
+        <p className="mt-1 text-sm text-slate-500">Volunteer Scheduling System</p>
         
         <div className="mt-4">
-          <label className="block text-sm font-medium">Account Type / Role</label>
+          <label className="block text-sm font-medium">Role</label>
           <select
-            className="mt-1 w-full rounded-lg border px-3 py-2 bg-white"
+            className="mt-1 w-full rounded-lg border px-3 py-2 bg-white capitalize"
             value={form.role}
             onChange={(e) => setForm({ ...form, role: e.target.value })}
           >
             <option value="volunteer">Volunteer</option>
-            <option value="coordinator">Coordinator (Admin)</option>
+            <option value="coordinator">Coordinator</option>
           </select>
         </div>
 

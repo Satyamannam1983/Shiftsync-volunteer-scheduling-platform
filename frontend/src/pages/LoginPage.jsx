@@ -48,28 +48,8 @@ export default function LoginPage() {
           {loading ? "Signing in..." : "Sign in"}
         </button>
 
-        <div className="mt-6 border-t pt-4 text-xs text-slate-500">
-          <p className="font-semibold text-slate-700 mb-2">Quick Demo Access:</p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="flex-1 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 font-medium text-slate-700 hover:bg-slate-100"
-              onClick={() => setForm({ email: "coordinator@example.com", password: "Coordinator123!" })}
-            >
-              Coordinator Demo
-            </button>
-            <button
-              type="button"
-              className="flex-1 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 font-medium text-slate-700 hover:bg-slate-100"
-              onClick={() => setForm({ email: "volunteer@example.com", password: "Volunteer123!" })}
-            >
-              Volunteer Demo
-            </button>
-          </div>
-        </div>
-
         <p className="mt-4 text-sm text-slate-500">
-          New volunteer? <Link className="text-brand-600 font-medium hover:underline" to="/register">Create an account</Link>
+          Need an account? <Link className="text-brand-600 font-medium hover:underline" to="/register">Create an account</Link>
         </p>
       </form>
     </div>
