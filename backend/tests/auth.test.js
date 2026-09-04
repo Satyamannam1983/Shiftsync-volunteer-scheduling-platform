@@ -28,14 +28,15 @@ describe("auth", () => {
     expect(res.status).toBe(409);
   });
 
-  it("does not create a coordinator via public registration", async () => {
+  it("allows creating a coordinator via registration when role is provided", async () => {
     const res = await request(app).post("/api/auth/register").send({
       name: "Eve",
       email: "eve@example.com",
       password: "password123",
       role: "coordinator",
     });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(201);
+    expect(res.body.user.role).toBe("coordinator");
   });
 
   it("logs in successfully", async () => {
