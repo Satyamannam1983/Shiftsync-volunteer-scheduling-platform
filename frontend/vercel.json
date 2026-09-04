@@ -1,0 +1,6 @@
+Vercel
+- Framework: Vite
+- Root: frontend
+- Build command: npm run build
+- Output: dist
+- Environment: VITE_API_URL=https://YOUR-RENDER-URL/api
