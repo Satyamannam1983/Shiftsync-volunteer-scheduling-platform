@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
-import { alertService } from "../services/dashboardService";
+import { alertService } from "../services/alertService";
 import { getErrorMessage } from "../services/api";
 import StateBadge from "../components/StateBadge";
 import EmptyState from "../components/EmptyState";

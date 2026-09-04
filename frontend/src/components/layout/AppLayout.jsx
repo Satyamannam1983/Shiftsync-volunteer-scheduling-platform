@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { alertService } from "../../services/dashboardService";
+import { alertService } from "../../services/alertService";
 
 const linkClass = ({ isActive }) =>
   `block rounded-lg px-3 py-2 text-sm font-medium ${

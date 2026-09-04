@@ -4,7 +4,8 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import { programService } from "../services/programService";
 import { shiftService } from "../services/shiftService";
-import { userService } from "../services/dashboardService";
+import { userService } from "../services/userService";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { useAuth } from "../context/AuthContext";
 import { getErrorMessage } from "../services/api";
 import StateBadge from "../components/StateBadge";
@@ -14,6 +15,7 @@ export default function ProgramDetailsPage() {
   const { isCoordinator } = useAuth();
   const queryClient = useQueryClient();
   const [volunteerId, setVolunteerId] = useState("");
+  const [confirm, setConfirm] = useState(null);
 
   const { data, isLoading } = useQuery({ queryKey: ["program", id], queryFn: () => programService.get(id) });
   const { data: members } = useQuery({ queryKey: ["members", id], queryFn: () => programService.members(id) });
@@ -31,14 +33,32 @@ export default function ProgramDetailsPage() {
   const program = data.program;
 
   const archiveOrRestore = async () => {
-    try {
-      if (program.archived) await programService.restore(id);
-      else await programService.archive(id);
-      queryClient.invalidateQueries({ queryKey: ["program", id] });
-      toast.success(program.archived ? "Restored" : "Archived");
-    } catch (error) {
-      toast.error(getErrorMessage(error));
+    if (program.archived) {
+      try {
+        await programService.restore(id);
+        queryClient.invalidateQueries({ queryKey: ["program", id] });
+        toast.success("Restored");
+      } catch (error) {
+        toast.error(getErrorMessage(error));
+      }
+      return;
     }
+    setConfirm({
+      title: "Archive this program?",
+      body: "The program and its shifts stay in the database but are hidden from default volunteer views.",
+      confirmLabel: "Archive",
+      onConfirm: async () => {
+        try {
+          await programService.archive(id);
+          queryClient.invalidateQueries({ queryKey: ["program", id] });
+          toast.success("Archived");
+        } catch (error) {
+          toast.error(getErrorMessage(error));
+        } finally {
+          setConfirm(null);
+        }
+      },
+    });
   };
 
   const addMember = async (e) => {
@@ -53,15 +73,24 @@ export default function ProgramDetailsPage() {
     }
   };
 
-  const removeMember = async (volunteer) => {
-    if (!window.confirm("Remove this volunteer? Future signups will be cancelled; history is kept.")) return;
-    try {
-      await programService.removeMember(id, volunteer);
-      queryClient.invalidateQueries({ queryKey: ["members", id] });
-      toast.success("Member removed");
-    } catch (error) {
-      toast.error(getErrorMessage(error));
-    }
+  const removeMember = (volunteer) => {
+    setConfirm({
+      title: "Remove this volunteer?",
+      body: "Future signups will be cancelled. Historical signup records are kept for audit.",
+      confirmLabel: "Remove",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await programService.removeMember(id, volunteer);
+          queryClient.invalidateQueries({ queryKey: ["members", id] });
+          toast.success("Member removed");
+        } catch (error) {
+          toast.error(getErrorMessage(error));
+        } finally {
+          setConfirm(null);
+        }
+      },
+    });
   };
 
   const exportRoster = async () => {
@@ -148,6 +177,15 @@ export default function ProgramDetailsPage() {
           </table>
         </div>
       </section>
+      <ConfirmDialog
+        open={Boolean(confirm)}
+        title={confirm?.title}
+        body={confirm?.body}
+        confirmLabel={confirm?.confirmLabel}
+        danger={confirm?.danger}
+        onConfirm={confirm?.onConfirm}
+        onCancel={() => setConfirm(null)}
+      />
     </div>
   );
 }

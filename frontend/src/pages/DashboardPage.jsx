@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { dashboardService, alertService } from "../services/dashboardService";
+import { dashboardService } from "../services/dashboardService";
+import { alertService } from "../services/alertService";
 import { useAuth } from "../context/AuthContext";
 import StateBadge from "../components/StateBadge";
+import EmptyState from "../components/EmptyState";
 
 export default function DashboardPage() {
   const { isCoordinator } = useAuth();
@@ -24,6 +26,8 @@ export default function DashboardPage() {
     ["Signups this week", summary.signupsThisWeek],
     ["Closed this week", summary.closedShiftsThisWeek ?? summary.shiftsClosedThisWeek],
   ];
+  const upcoming = summary.upcomingShifts || [];
+  const recentAlerts = alerts?.alerts || [];
 
   return (
     <div className="space-y-8">
@@ -75,22 +79,55 @@ export default function DashboardPage() {
           </ul>
         </div>
       </div>
-      {isCoordinator && (
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-semibold">Recent alerts</h2>
-            <Link className="text-sm text-brand-600" to="/alerts">View all</Link>
-          </div>
-          {(alerts?.alerts || []).slice(0, 5).map((alert) => (
-            <div key={alert.shiftId} className="flex items-center justify-between border-t py-3 text-sm">
-              <div>
-                {alert.programName} · {alert.date} {alert.startTime}
-              </div>
-              <StateBadge state={alert.state} />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="rounded-2xl bg-white p-5 shadow-sm">
+          <h2 className="mb-3 font-semibold">Upcoming shifts</h2>
+          {upcoming.length === 0 ? (
+            <EmptyState title="No upcoming shifts" body="Scheduled shifts will appear here." />
+          ) : (
+            <ul className="divide-y text-sm">
+              {upcoming.map((shift) => (
+                <li key={shift._id} className="flex items-center justify-between py-3">
+                  <div>
+                    <div className="font-medium">{shift.program?.name}</div>
+                    <div className="text-slate-500">
+                      {String(shift.date).slice(0, 10)} · {shift.startTime} · {shift.location}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <StateBadge state={shift.state} />
+                    <Link className="text-brand-600" to={`/shifts/${shift._id}`}>
+                      Open
+                    </Link>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        {isCoordinator && (
+          <section className="rounded-2xl bg-white p-5 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-semibold">Recent alerts</h2>
+              <Link className="text-sm text-brand-600" to="/alerts">
+                View all
+              </Link>
             </div>
-          ))}
-        </div>
-      )}
+            {recentAlerts.length === 0 ? (
+              <p className="text-sm text-slate-500">No understaffed shifts in the next 3 days.</p>
+            ) : (
+              recentAlerts.slice(0, 5).map((alert) => (
+                <div key={alert.shiftId} className="flex items-center justify-between border-t py-3 text-sm">
+                  <div>
+                    {alert.programName} · {alert.date} {alert.startTime}
+                  </div>
+                  <StateBadge state={alert.state} />
+                </div>
+              ))
+            )}
+          </section>
+        )}
+      </div>
     </div>
   );
 }

@@ -95,8 +95,8 @@ cd frontend && npm test
 ## Deployment
 
 - Atlas: create a cluster and database user, whitelist Render IPs or `0.0.0.0/0` for a take-home.
-- Render: Web Service, root `backend`, start `npm start`, build `npm install`.
-- Vercel: root `frontend`, env `VITE_API_URL` pointing at the Render `/api` origin.
+- Render: Web Service, root `backend`, start `npm start`, build `npm install`. A `render.yaml` blueprint is at the repo root. Set `FRONTEND_URL` to the Vercel origin (comma-separated if you have more than one).
+- Vercel: root `frontend`, env `VITE_API_URL` pointing at the Render `/api` origin. `frontend/vercel.json` rewrites client routes to `index.html`.
 
 ## Demo accounts
 

@@ -1,14 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import { useState } from "react";
 import { programService } from "../services/programService";
 import { useAuth } from "../context/AuthContext";
 import EmptyState from "../components/EmptyState";
 
 export default function ProgramsPage() {
   const { isCoordinator } = useAuth();
+  const [includeArchived, setIncludeArchived] = useState(false);
   const { data, isLoading, error } = useQuery({
-    queryKey: ["programs"],
-    queryFn: () => programService.list(),
+    queryKey: ["programs", includeArchived],
+    queryFn: () => programService.list(isCoordinator && includeArchived ? { archived: "all" } : undefined),
   });
 
   if (isLoading) return <div>Loading programs...</div>;
@@ -21,9 +23,20 @@ export default function ProgramsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">{isCoordinator ? "Programs" : "My Programs"}</h1>
         {isCoordinator && (
-          <Link to="/programs/new" className="rounded-lg bg-brand-600 px-4 py-2 text-white">
-            New program
-          </Link>
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-slate-600">
+              <input
+                className="mr-2"
+                type="checkbox"
+                checked={includeArchived}
+                onChange={(e) => setIncludeArchived(e.target.checked)}
+              />
+              Show archived
+            </label>
+            <Link to="/programs/new" className="rounded-lg bg-brand-600 px-4 py-2 text-white">
+              New program
+            </Link>
+          </div>
         )}
       </div>
       {programs.length === 0 ? (

@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import StateBadge from "../components/StateBadge";
+import StateBadge from "./StateBadge";
 
 describe("StateBadge", () => {
   it("renders the derived fill state", () => {

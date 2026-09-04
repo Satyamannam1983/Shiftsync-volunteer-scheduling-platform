@@ -67,11 +67,16 @@ export default function ShiftFormPage() {
           <option key={program._id} value={program._id}>{program.name}</option>
         ))}
       </select>
+      <label className="block text-sm font-medium">Date</label>
       <input className="w-full rounded-lg border px-3 py-2" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
-      <input className="w-full rounded-lg border px-3 py-2" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} required />
-      <input className="w-full rounded-lg border px-3 py-2" type="number" value={form.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: e.target.value })} />
+      <label className="block text-sm font-medium">Start time</label>
+      <input className="w-full rounded-lg border px-3 py-2" type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} required />
+      <label className="block text-sm font-medium">Duration (minutes)</label>
+      <input className="w-full rounded-lg border px-3 py-2" type="number" min="1" value={form.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: e.target.value })} required />
+      <label className="block text-sm font-medium">Location</label>
       <input className="w-full rounded-lg border px-3 py-2" placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} required />
-      <input className="w-full rounded-lg border px-3 py-2" type="number" value={form.requiredHeadcount} onChange={(e) => setForm({ ...form, requiredHeadcount: e.target.value })} />
+      <label className="block text-sm font-medium">Required headcount</label>
+      <input className="w-full rounded-lg border px-3 py-2" type="number" min="1" value={form.requiredHeadcount} onChange={(e) => setForm({ ...form, requiredHeadcount: e.target.value })} required />
       <button className="rounded-lg bg-brand-600 px-4 py-2 text-white">Save</button>
     </form>
   );

@@ -55,4 +55,12 @@ describe("authorization", () => {
       .send({ volunteerId: volunteer._id });
     expect(res.status).toBe(403);
   });
+
+  it("prevents a volunteer from listing or dismissing alerts", async () => {
+    const volunteerApi = auth(app, volunteer);
+    const list = await volunteerApi.get("/api/alerts");
+    expect(list.status).toBe(403);
+    const dismiss = await volunteerApi.post("/api/alerts/000000000000000000000000/dismiss");
+    expect(dismiss.status).toBe(403);
+  });
 });

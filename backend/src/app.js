@@ -18,10 +18,15 @@ const errorHandler = require("./middleware/errorMiddleware");
 
 const app = express();
 
+const corsOrigins = (process.env.FRONTEND_URL || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || true,
+    origin: corsOrigins.length ? corsOrigins : true,
     credentials: true,
   })
 );

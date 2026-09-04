@@ -3,10 +3,12 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { shiftService } from "../services/shiftService";
-import { userService } from "../services/dashboardService";
+import { userService } from "../services/userService";
 import { useAuth } from "../context/AuthContext";
 import { getErrorMessage } from "../services/api";
+import { currentUserId, sameId } from "../utils/ids";
 import StateBadge from "../components/StateBadge";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 export default function ShiftDetailsPage() {
   const { id } = useParams();
@@ -15,6 +17,7 @@ export default function ShiftDetailsPage() {
   const queryClient = useQueryClient();
   const [note, setNote] = useState("");
   const [volunteerId, setVolunteerId] = useState("");
+  const [confirm, setConfirm] = useState(null);
 
   const { data, isLoading, error } = useQuery({ queryKey: ["shift", id], queryFn: () => shiftService.get(id) });
   const { data: signups } = useQuery({ queryKey: ["signups", id], queryFn: () => shiftService.signups(id) });
@@ -29,7 +32,7 @@ export default function ShiftDetailsPage() {
   if (error) return <div className="text-red-600">Could not load shift.</div>;
 
   const shift = data.shift;
-  const mySignup = (signups?.signups || []).find((signup) => signup.volunteer?._id === user?.id || signup.volunteer?._id === user?._id);
+  const mySignup = (signups?.signups || []).find((signup) => sameId(signup.volunteer?._id, currentUserId(user)));
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["shift", id] });
@@ -48,37 +51,63 @@ export default function ShiftDetailsPage() {
     }
   };
 
-  const cancel = async (signupId) => {
-    if (!window.confirm("Cancel this signup?")) return;
-    try {
-      await shiftService.cancelSignup(id, signupId);
-      toast.success("Signup cancelled");
-      refresh();
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    }
+  const cancel = (signupId) => {
+    setConfirm({
+      title: "Cancel this signup?",
+      body: "The volunteer will lose this spot and fill state will be recalculated on the server.",
+      confirmLabel: "Cancel signup",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await shiftService.cancelSignup(id, signupId);
+          toast.success("Signup cancelled");
+          refresh();
+        } catch (err) {
+          toast.error(getErrorMessage(err));
+        } finally {
+          setConfirm(null);
+        }
+      },
+    });
   };
 
-  const closeShift = async () => {
-    if (!window.confirm("Close this shift? Signups will be locked.")) return;
-    try {
-      await shiftService.close(id);
-      toast.success("Shift closed");
-      refresh();
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    }
+  const closeShift = () => {
+    setConfirm({
+      title: "Close this shift?",
+      body: "After closing, no new signups or cancellations are allowed.",
+      confirmLabel: "Close shift",
+      onConfirm: async () => {
+        try {
+          await shiftService.close(id);
+          toast.success("Shift closed");
+          refresh();
+        } catch (err) {
+          toast.error(getErrorMessage(err));
+        } finally {
+          setConfirm(null);
+        }
+      },
+    });
   };
 
-  const deleteShift = async () => {
-    if (!window.confirm("Delete this shift?")) return;
-    try {
-      await shiftService.remove(id);
-      toast.success("Deleted");
-      navigate("/shifts");
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    }
+  const deleteShift = () => {
+    setConfirm({
+      title: "Delete this shift?",
+      body: "This removes the shift. History already recorded stays immutable.",
+      confirmLabel: "Delete",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await shiftService.remove(id);
+          toast.success("Deleted");
+          navigate("/shifts");
+        } catch (err) {
+          toast.error(getErrorMessage(err));
+        } finally {
+          setConfirm(null);
+        }
+      },
+    });
   };
 
   const addNote = async (e) => {
@@ -133,7 +162,7 @@ export default function ShiftDetailsPage() {
             {(signups?.signups || []).map((signupRow) => (
               <li key={signupRow._id} className="flex items-center justify-between py-2">
                 <span>{signupRow.volunteer?.name}</span>
-                {(isCoordinator || signupRow.volunteer?._id === user?.id) && (
+                {(isCoordinator || sameId(signupRow.volunteer?._id, currentUserId(user))) && (
                   <button className="text-red-600" onClick={() => cancel(signupRow._id)}>Cancel</button>
                 )}
               </li>
@@ -163,6 +192,15 @@ export default function ShiftDetailsPage() {
           ))}
         </ol>
       </section>
+      <ConfirmDialog
+        open={Boolean(confirm)}
+        title={confirm?.title}
+        body={confirm?.body}
+        confirmLabel={confirm?.confirmLabel}
+        danger={confirm?.danger}
+        onConfirm={confirm?.onConfirm}
+        onCancel={() => setConfirm(null)}
+      />
     </div>
   );
 }

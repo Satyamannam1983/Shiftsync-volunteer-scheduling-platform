@@ -33,7 +33,7 @@ export default function ShiftsPage() {
           <Link to="/shifts/new" className="rounded-lg bg-brand-600 px-4 py-2 text-white">New shift</Link>
         )}
       </div>
-      <div className="grid gap-3 rounded-2xl bg-white p-4 shadow-sm md:grid-cols-5">
+      <div className="grid gap-3 rounded-2xl bg-white p-4 shadow-sm md:grid-cols-6">
         <input className="rounded-lg border px-3 py-2" placeholder="Search program or location" defaultValue={query.search} onBlur={(e) => update("search", e.target.value)} />
         <select className="rounded-lg border px-3 py-2" value={query.programId || ""} onChange={(e) => update("programId", e.target.value)}>
           <option value="">All programs</option>
@@ -48,12 +48,13 @@ export default function ShiftsPage() {
           ))}
         </select>
         <input className="rounded-lg border px-3 py-2" type="date" value={query.dateFrom || ""} onChange={(e) => update("dateFrom", e.target.value)} />
+        <input className="rounded-lg border px-3 py-2" type="date" value={query.dateTo || ""} onChange={(e) => update("dateTo", e.target.value)} />
         <select className="rounded-lg border px-3 py-2" value={`${query.sortBy}:${query.sortOrder}`} onChange={(e) => {
           const [sortBy, sortOrder] = e.target.value.split(":");
-          update("sortBy", sortBy);
           const next = new URLSearchParams(params);
           next.set("sortBy", sortBy);
           next.set("sortOrder", sortOrder);
+          next.set("page", "1");
           setParams(next);
         }}>
           <option value="date:asc">Date asc</option>

@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: volunteer-scheduling-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 1d
+      - key: APP_TIMEZONE
+        value: UTC

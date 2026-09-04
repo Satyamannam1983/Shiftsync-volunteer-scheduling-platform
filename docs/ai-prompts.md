@@ -26,3 +26,11 @@ This produced: audit of `backend/src`, hardening of signup/alert/search/dashboar
 ## What stayed from the existing backend
 
 User/Program/Shift/Signup schemas, JWT middleware shape, and most route URLs were kept and extended rather than rewritten from scratch.
+
+## Session 3 — remaining work after push
+
+User: "ok continue with the remaining work"
+
+Follow-up after GitHub push. Implemented deploy config (`vercel.json` was previously notes, not JSON), Render blueprint, dashboard upcoming shifts, date-range UI, confirmation dialogs, split frontend services, extra tests, and the public GitHub URL in SUBMISSION.md.
+
+Live Render/Vercel URLs were still not created because this environment cannot authenticate to those accounts.
