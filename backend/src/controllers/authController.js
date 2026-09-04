@@ -2,8 +2,8 @@ const { registerVolunteer, loginUser, getUserById } = require("../services/authS
 const asyncHandler = require("../utils/asyncHandler");
 
 const register = asyncHandler(async (req, res) => {
-  const { name, email, password } = req.body;
-  const user = await registerVolunteer({ name, email, password });
+  const { name, email, password, role } = req.body;
+  const user = await registerVolunteer({ name, email, password, role });
 
   res.status(201).json({
     message: "User registered successfully",

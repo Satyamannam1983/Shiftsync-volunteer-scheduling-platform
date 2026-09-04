@@ -9,12 +9,8 @@ const registerValidators = [
     .withMessage("Password must be at least 8 characters"),
   body("role")
     .optional()
-    .custom((value) => {
-      if (value && value !== "volunteer") {
-        throw new Error("Public registration can only create volunteer accounts");
-      }
-      return true;
-    }),
+    .isIn(["volunteer", "coordinator"])
+    .withMessage("Role must be either volunteer or coordinator"),
   handleValidation,
 ];
 

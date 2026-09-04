@@ -14,7 +14,7 @@ const toPublicUser = (user) => ({
   updatedAt: user.updatedAt,
 });
 
-const registerVolunteer = async ({ name, email, password }) => {
+const registerVolunteer = async ({ name, email, password, role = "volunteer" }) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   const existingUser = await User.findOne({ email: normalizedEmail });
@@ -22,13 +22,14 @@ const registerVolunteer = async ({ name, email, password }) => {
     throw new AppError("User with this email already exists", 409);
   }
 
+  const userRole = role === "coordinator" ? "coordinator" : "volunteer";
   const passwordHash = await bcrypt.hash(password, 10);
 
   const user = await User.create({
     name: name.trim(),
     email: normalizedEmail,
     passwordHash,
-    role: "volunteer",
+    role: userRole,
   });
 
   return toPublicUser(user);
