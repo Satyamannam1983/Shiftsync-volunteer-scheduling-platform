@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 
 const authRoutes = require("./routes/authRoutes");
+const programRoutes = require("./routes/programRoutes");
+const errorHandler = require("./middleware/errorMiddleware");
 
 const app = express();
 
@@ -21,5 +23,9 @@ app.get("/api/health", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/programs", programRoutes);
+
+// Error handling middleware (must be last)
+app.use(errorHandler);
 
 module.exports = app;
