@@ -5,6 +5,7 @@ const authRoutes = require("./routes/authRoutes");
 const programRoutes = require("./routes/programRoutes");
 const shiftRoutes = require("./routes/shiftRoutes");
 const rosterRoutes = require("./routes/rosterRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
 const errorHandler = require("./middleware/errorMiddleware");
 
 const app = express();
@@ -28,6 +29,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/programs", programRoutes);
 app.use("/api/shifts", shiftRoutes);
 app.use("/api/roster", rosterRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);
