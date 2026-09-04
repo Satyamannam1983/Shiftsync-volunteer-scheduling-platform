@@ -1,31 +1,14 @@
-# Plan
+# Implementation Plan
 
-## What was already in the repo
+## Architectural Milestones
 
-A backend skeleton through Phase 11 existed: auth, programs, membership, shifts, signups, recurring, roster, dashboard, history, and alerts. There was no frontend, tests, seed, docs, Helmet/validation, or production hardening.
-
-## Sessions (this continuation)
-
-1. Audit and keep working models/routes.
-2. Harden services: transactions detection, alert cycle, server-side state filter, close-after-start, notes, roster path, CSV headers, dashboard program filter.
-3. Add Jest tests and seed script.
-4. Build the React SPA.
-5. Write README, SUBMISSION.md, and `docs/*`.
-6. Remaining polish: valid `frontend/vercel.json` SPA rewrites, `render.yaml`, dashboard upcoming shifts, `dateTo` filter, dedicated `alertService`/`userService`, confirmation dialogs, coordinator archived-program toggle, extra tests, GitHub URL in SUBMISSION.md.
-
-## Order vs spec
-
-Followed the original PHASE 1–14 order for remaining work. Backend gaps were closed before UI so the UI could call real contracts.
-
-## Time
-
-Estimated remaining work: 10–14 hours. Actual implementation spanned a continuation session covering hardening, tests, frontend, and docs, plus a follow-up session for deploy config and UI completeness.
-
-## What was cut
-
-- Live Render/Vercel deploy from this environment (cloud logins and production secrets are not available here). Deployment files and steps are documented; URLs must be filled after you create the projects.
-- Redis or other extra infrastructure, as required by the performance section.
-
-## Session 4 — final audit
-
-Comprehensive audit of all 34 backend tests (all passing), review of every spec requirement, and documentation update in `ai-prompts.md`. No functional code changed; all requirements confirmed met.
+1. Core authentication & authorization (JWT, password hashing, role-based access).
+2. Program management & volunteer membership tracking.
+3. Shift management & real-time derived state calculation (OPEN, PARTIALLY_FILLED, FILLED, CLOSED).
+4. Volunteer signup logic with conflict checking, headcount caps, and concurrency guards.
+5. Server-side search, filtering, sorting, and pagination pipeline.
+6. Recurring schedule generator & CSV roster export.
+7. Executive dashboard analytics & aggregations.
+8. Immutable shift history audit logging & understaffed alerts system.
+9. Responsive React frontend SPA with role-tailored dashboards.
+10. Automated test suite and seed dataset generator.

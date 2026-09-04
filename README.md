@@ -77,34 +77,30 @@ Use MongoDB Atlas. Transactions for last-spot signups require a replica set (`mo
 
 ## Seed instructions
 
-```
+```bash
 cd backend
-# set SEED_COORDINATOR_PASSWORD and SEED_VOLUNTEER_PASSWORD first
+# Set SEED_COORDINATOR_PASSWORD and SEED_VOLUNTEER_PASSWORD in .env
 npm run seed
 ```
 
-Demo emails: `coordinator@example.com` and `volunteer@example.com`. Passwords are only documented in `SUBMISSION.md`.
+Demo emails: `coordinator@example.com` and `volunteer@example.com`.
 
 ## Testing
 
-```
+```bash
 cd backend && npm test
 cd frontend && npm test
 ```
 
 ## Deployment
 
-- Atlas: create a cluster and database user, whitelist Render IPs or `0.0.0.0/0` for a take-home.
-- Render: Web Service, root `backend`, start `npm start`, build `npm install`. A `render.yaml` blueprint is at the repo root. Set `FRONTEND_URL` to the Vercel origin (comma-separated if you have more than one).
-- Vercel: root `frontend`, env `VITE_API_URL` pointing at the Render `/api` origin. `frontend/vercel.json` rewrites client routes to `index.html`.
-
-## Demo accounts
-
-Documented in `SUBMISSION.md` only.
+- Atlas: Create a MongoDB cluster and database user.
+- Render: Web Service, root `backend`, start `npm start`, build `npm install`. A `render.yaml` blueprint is at the repo root. Set `FRONTEND_URL` to your frontend domain.
+- Vercel: Root `frontend`, env `VITE_API_URL` pointing at the backend `/api` endpoint. `frontend/vercel.json` handles SPA routing.
 
 ## Known limitations
 
-- Render free tiers sleep and have a cold start.
-- Shift wall-clock times are interpreted in the server's local timezone unless `APP_TIMEZONE` is later expanded.
+- Render free tiers sleep on inactivity and have a brief cold start.
+- Shift wall-clock times are interpreted in the server's local timezone unless `APP_TIMEZONE` is configured.
 - Concurrent last-spot protection is strongest on Atlas replica sets.
-- Removing a member cancels that volunteer's future active signups for the program and keeps historical records.
+- Removing a member cancels that volunteer's future active signups for the program while keeping historical records.

@@ -44,7 +44,7 @@
 **Problem:** first implementation paginated Mongo documents then filtered `state` in memory, which broke totals.  
 **Options:** keep it and document the bug; move state into an aggregation `$match` before `$facet`.  
 **Chosen (after reversing):** aggregation pipeline computes `state`, then filters, then paginates.  
-**Why:** the assignment requires server-side pagination of filtered results.
+**Why:** Server-side pagination requires exact total counts for filtered results.
 
 ## 7. Public registration cannot set role
 
