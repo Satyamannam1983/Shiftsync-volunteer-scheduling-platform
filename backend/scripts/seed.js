@@ -84,15 +84,16 @@ const seed = async () => {
     createdBy: coordinator._id,
   });
 
-  await ProgramMember.create([
-    { program: foodBank._id, volunteer: alice._id, addedBy: coordinator._id },
-    { program: foodBank._id, volunteer: bob._id, addedBy: coordinator._id },
-    { program: foodBank._id, volunteer: chen._id, addedBy: coordinator._id },
-    { program: shelter._id, volunteer: alice._id, addedBy: coordinator._id },
-    { program: shelter._id, volunteer: dana._id, addedBy: coordinator._id },
-    { program: tutoring._id, volunteer: bob._id, addedBy: coordinator._id },
-    { program: tutoring._id, volunteer: evan._id, addedBy: coordinator._id },
-  ]);
+  const allPrograms = [foodBank, shelter, tutoring];
+  for (const prog of allPrograms) {
+    for (const vol of volunteers) {
+      await ProgramMember.create({
+        program: prog._id,
+        volunteer: vol._id,
+        addedBy: coordinator._id,
+      }).catch(() => {});
+    }
+  }
 
   const today = new Date();
   today.setUTCHours(12, 0, 0, 0);

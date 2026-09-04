@@ -16,8 +16,10 @@ const STATE_SORT_ORDER = {
 };
 
 const volunteerProgramIds = async (userId) => {
-  const memberPrograms = await ProgramMember.find({ volunteer: userId }).distinct("program");
-  return Program.find({ _id: { $in: memberPrograms }, archived: false }).distinct("_id");
+  const volunteerObjId = new mongoose.Types.ObjectId(userId);
+  const memberPrograms = await ProgramMember.find({ volunteer: volunteerObjId }).distinct("program");
+  const programs = await Program.find({ _id: { $in: memberPrograms }, archived: false }).distinct("_id");
+  return programs.map((id) => new mongoose.Types.ObjectId(id));
 };
 
 const listShifts = async ({ user, query }) => {

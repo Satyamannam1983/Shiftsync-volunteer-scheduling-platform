@@ -14,6 +14,9 @@ const toPublicUser = (user) => ({
   updatedAt: user.updatedAt,
 });
 
+const Program = require("../models/Program");
+const ProgramMember = require("../models/ProgramMember");
+
 const registerVolunteer = async ({ name, email, password, role = "volunteer" }) => {
   const normalizedEmail = email.toLowerCase().trim();
 
@@ -31,6 +34,17 @@ const registerVolunteer = async ({ name, email, password, role = "volunteer" }) 
     passwordHash,
     role: userRole,
   });
+
+  if (userRole === "volunteer") {
+    const activePrograms = await Program.find({ archived: false }).select("_id createdBy");
+    for (const prog of activePrograms) {
+      await ProgramMember.create({
+        program: prog._id,
+        volunteer: user._id,
+        addedBy: prog.createdBy || user._id,
+      }).catch(() => {});
+    }
+  }
 
   return toPublicUser(user);
 };
