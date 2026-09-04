@@ -9,6 +9,7 @@ const {
   doTimeWindowsOverlap,
   hasShiftTimePassed,
 } = require("../utils/dateUtils");
+const { createHistoryEvent } = require("./historyService");
 
 /**
  * Create a signup for a shift with transaction support for concurrency handling
@@ -117,6 +118,18 @@ const createSignup = async (shiftId, volunteerId, actorId, actorRole) => {
       const newSignups = currentSignups + 1;
       const newState = calculateShiftState(newSignups, shift.requiredHeadcount, shift.closed);
 
+      // Create history events
+      await createHistoryEvent(shiftId, "SIGNUP_CREATED", actorId, {
+        volunteer: volunteerId,
+      });
+
+      if (newState !== currentState) {
+        await createHistoryEvent(shiftId, "STATE_CHANGED", actorId, {
+          oldState: currentState,
+          newState,
+        });
+      }
+
       await session.commitTransaction();
 
       return {
@@ -218,6 +231,18 @@ const createSignup = async (shiftId, volunteerId, actorId, actorRole) => {
     const newSignups = currentSignups + 1;
     const newState = calculateShiftState(newSignups, shift.requiredHeadcount, shift.closed);
 
+    // Create history events
+    await createHistoryEvent(shiftId, "SIGNUP_CREATED", actorId, {
+      volunteer: volunteerId,
+    });
+
+    if (newState !== currentState) {
+      await createHistoryEvent(shiftId, "STATE_CHANGED", actorId, {
+        oldState: currentState,
+        newState,
+      });
+    }
+
     return {
       signup,
       previousState: currentState,
@@ -290,6 +315,18 @@ const cancelSignup = async (signupId, actorId, actorRole) => {
       const newSignups = currentSignups - 1;
       const newState = calculateShiftState(newSignups, shift.requiredHeadcount, shift.closed);
 
+      // Create history events
+      await createHistoryEvent(shift._id, "SIGNUP_CANCELLED", actorId, {
+        volunteer: signup.volunteer,
+      });
+
+      if (newState !== currentState) {
+        await createHistoryEvent(shift._id, "STATE_CHANGED", actorId, {
+          oldState: currentState,
+          newState,
+        });
+      }
+
       await session.commitTransaction();
 
       return {
@@ -347,6 +384,18 @@ const cancelSignup = async (signupId, actorId, actorRole) => {
     // 8. Recalculate state
     const newSignups = currentSignups - 1;
     const newState = calculateShiftState(newSignups, shift.requiredHeadcount, shift.closed);
+
+    // Create history events
+    await createHistoryEvent(shift._id, "SIGNUP_CANCELLED", actorId, {
+      volunteer: signup.volunteer,
+    });
+
+    if (newState !== currentState) {
+      await createHistoryEvent(shift._id, "STATE_CHANGED", actorId, {
+        oldState: currentState,
+        newState,
+      });
+    }
 
     return {
       signup,

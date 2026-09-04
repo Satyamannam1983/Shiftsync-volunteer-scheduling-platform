@@ -2,6 +2,7 @@ const Shift = require("../models/Shift");
 const Program = require("../models/Program");
 const Signup = require("../models/Signup");
 const { calculateShiftState } = require("../utils/stateUtils");
+const { createHistoryEvent, getShiftHistory: getShiftHistoryService } = require("../services/historyService");
 
 const createShift = async (req, res) => {
   try {
@@ -54,6 +55,9 @@ const createShift = async (req, res) => {
       requiredHeadcount,
       createdBy: req.user.userId,
     });
+
+    // Create history event
+    await createHistoryEvent(shift._id, "SHIFT_CREATED", req.user.userId);
 
     await shift.populate("program", "name");
     await shift.populate("createdBy", "name email");
@@ -372,6 +376,9 @@ const closeShift = async (req, res) => {
     shift.closedAt = new Date();
     await shift.save();
 
+    // Create history event
+    await createHistoryEvent(shift._id, "SHIFT_CLOSED", req.user.userId);
+
     await shift.populate("program", "name");
     await shift.populate("createdBy", "name email");
 
@@ -387,6 +394,46 @@ const closeShift = async (req, res) => {
   }
 };
 
+const getShiftHistoryController = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const shift = await Shift.findById(id);
+
+    if (!shift) {
+      return res.status(404).json({
+        message: "Shift not found",
+      });
+    }
+
+    // Volunteers can only see history for shifts in their programs
+    if (req.user.role === "volunteer") {
+      const ProgramMember = require("../models/ProgramMember");
+      const membership = await ProgramMember.findOne({
+        program: shift.program,
+        volunteer: req.user.userId,
+      });
+
+      if (!membership) {
+        return res.status(403).json({
+          message: "You do not have access to this shift",
+        });
+      }
+    }
+
+    const history = await getShiftHistoryService(id);
+
+    res.status(200).json({
+      history,
+    });
+  } catch (error) {
+    console.error("Get shift history error:", error);
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
 module.exports = {
   createShift,
   getShifts,
@@ -394,4 +441,5 @@ module.exports = {
   updateShift,
   deleteShift,
   closeShift,
+  getShiftHistory: getShiftHistoryController,
 };

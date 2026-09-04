@@ -7,6 +7,7 @@ const {
   updateShift,
   deleteShift,
   closeShift,
+  getShiftHistory: getShiftHistoryController,
 } = require("../controllers/shiftController");
 
 const {
@@ -29,6 +30,7 @@ router.get("/:id", getShiftById);
 router.patch("/:id", authorize("coordinator"), updateShift);
 router.delete("/:id", authorize("coordinator"), deleteShift);
 router.post("/:id/close", authorize("coordinator"), closeShift);
+router.get("/:id/history", getShiftHistoryController);
 
 // Signup operations (nested under shift routes)
 router.post("/:shiftId/signups", createShiftSignup);
