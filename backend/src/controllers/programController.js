@@ -1,6 +1,7 @@
 const Program = require("../models/Program");
 const ProgramMember = require("../models/ProgramMember");
 const User = require("../models/User");
+const { generateRecurringShifts } = require("../services/recurringScheduleService");
 
 const createProgram = async (req, res) => {
   try {
@@ -327,6 +328,64 @@ const removeProgramMember = async (req, res) => {
   }
 };
 
+const generateRecurringSchedule = async (req, res) => {
+  try {
+    const { programId } = req.params;
+    const {
+      startDate,
+      endDate,
+      dayOfWeek,
+      startTime,
+      durationMinutes,
+      location,
+      requiredHeadcount,
+      excludedDates = [],
+    } = req.body;
+
+    if (!startDate || !endDate || !dayOfWeek || !startTime || !durationMinutes || !location || !requiredHeadcount) {
+      return res.status(400).json({
+        message: "All recurring schedule fields are required",
+      });
+    }
+
+    const result = await generateRecurringShifts(
+      programId,
+      startDate,
+      endDate,
+      dayOfWeek,
+      startTime,
+      durationMinutes,
+      location,
+      requiredHeadcount,
+      excludedDates,
+      req.user.userId
+    );
+
+    res.status(200).json({
+      message: "Recurring schedule generated successfully",
+      ...result,
+    });
+  } catch (error) {
+    console.error("Generate recurring schedule error:", error);
+
+    if (error.message.includes("not found")) {
+      return res.status(404).json({
+        message: error.message,
+      });
+    }
+
+    if (error.message.includes("archived") || error.message.includes("must be")) {
+      return res.status(400).json({
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
 module.exports = {
   createProgram,
   getPrograms,
@@ -337,4 +396,5 @@ module.exports = {
   getProgramMembers,
   addProgramMember,
   removeProgramMember,
+  generateRecurringSchedule,
 };

@@ -10,6 +10,7 @@ const {
   getProgramMembers,
   addProgramMember,
   removeProgramMember,
+  generateRecurringSchedule,
 } = require("../controllers/programController");
 
 const { authenticate, authorize } = require("../middleware/authMiddleware");
@@ -34,6 +35,13 @@ router.delete(
   "/:programId/members/:volunteerId",
   authorize("coordinator"),
   removeProgramMember
+);
+
+// Recurring schedule generation
+router.post(
+  "/:programId/shifts/recurring",
+  authorize("coordinator"),
+  generateRecurringSchedule
 );
 
 module.exports = router;
