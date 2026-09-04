@@ -2,28 +2,28 @@
 
 ## Project
 
-ShiftSync is a volunteer scheduling system for coordinators and volunteers. It provides role-based access to programs, shifts, signups, rosters, dashboards, and scheduling history.
+ShiftSync is a role-based volunteer scheduling system for coordinators and volunteers. It manages programs, shifts, signups, rosters, dashboards, and scheduling history.
 
 ## Repository
 
-https://github.com/Satyamannam1983/volunteer-scheduling
+https://github.com/Satyamannam1983/Shiftsync-volunteer-scheduling-platform
 
 ## Live Application
 
-- Frontend: **[PLACEHOLDER: Render frontend URL is not present in the repository configuration]**
+- Frontend: https://frontend-nine-rho-5jkfg6504z.vercel.app/
 - Backend: https://shiftsync-volunteer-scheduling-platform-1.onrender.com
 
 ## Demo Credentials
 
 ### Coordinator
 
-- Email: `coordinator@example.com`
-- Password: **[PLACEHOLDER: set via `SEED_COORDINATOR_PASSWORD`; not stored in the repository]**
+- Email: `shiftsync1@gmail.com`
+- Password: `shiftsync`
 
 ### Volunteer
 
-- Email: `volunteer@example.com`
-- Password: **[PLACEHOLDER: set via `SEED_VOLUNTEER_PASSWORD`; not stored in the repository]**
+- Email: `shiftsync2@gmail.com`
+- Password: `shiftsync`
 
 ## Tech Stack
 
@@ -48,9 +48,9 @@ https://github.com/Satyamannam1983/volunteer-scheduling
 
 ## Deployment
 
-The backend runs as a Node/Express web service on Render and exposes the `/api` routes, including `/api/health`. The frontend is deployed as a Render static site and communicates with the backend over HTTPS using the `VITE_API_URL` build-time variable. The backend uses MongoDB Atlas through `MONGODB_URI`.
+The backend runs as a Node/Express web service on Render and exposes the `/api` routes, including `/api/health`. The frontend is deployed on Vercel and communicates with the backend over HTTPS using the `VITE_API_URL` build-time variable. The backend uses MongoDB Atlas through `MONGODB_URI`.
 
-Production configuration also requires `JWT_SECRET`, `FRONTEND_URL`, `NODE_ENV`, `JWT_EXPIRES_IN`, and `APP_TIMEZONE`. Seed passwords are supplied separately through `SEED_COORDINATOR_PASSWORD` and `SEED_VOLUNTEER_PASSWORD`; secrets and connection strings are not committed.
+Production configuration also requires `JWT_SECRET`, `FRONTEND_URL`, `NODE_ENV`, `JWT_EXPIRES_IN`, and `APP_TIMEZONE`. Secrets and connection strings are not committed.
 
 Render free-tier services may sleep when inactive, causing a cold start on the first request.
 
@@ -74,14 +74,14 @@ Configure the environment variables from `backend/.env.example` and `frontend/.e
 
 ## Testing
 
-The repository includes Jest and Supertest API tests under `backend/tests`, plus Vitest and React Testing Library tests under `frontend/src`. Available commands are:
+The repository includes Jest/Supertest API tests and Vitest/React Testing Library frontend tests:
 
 ```bash
 cd backend && npm test
 cd frontend && npm test
 ```
 
-The deployed backend health endpoint was verified at `/api/health`, and the deployed frontend login route was verified to load.
+The deployed backend health endpoint and frontend login route were verified.
 
 ## Known Limitations
 
@@ -92,11 +92,11 @@ The deployed backend health endpoint was verified at `/api/health`, and the depl
 ## Submission Checklist
 
 - [x] Public GitHub repository
-- [ ] Live frontend — URL not present in repository configuration
+- [x] Live frontend
 - [x] Live backend
-- [x] MongoDB Atlas configuration
-- [ ] Demo coordinator password — supplied through deployment environment
-- [ ] Demo volunteer password — supplied through deployment environment
-- [x] Environment variables configured outside source control
+- [x] MongoDB Atlas
+- [x] Demo coordinator
+- [x] Demo volunteer
+- [x] Environment variables
 - [x] Seed/demo data
 - [x] Documentation
