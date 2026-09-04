@@ -70,6 +70,137 @@ const createShift = async (req, res) => {
   }
 };
 
+const getShifts = async (req, res) => {
+  try {
+    const {
+      search,
+      programId,
+      state,
+      dateFrom,
+      dateTo,
+      sortBy = "date",
+      sortOrder = "asc",
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    // Build filter
+    const filter = {};
+
+    // Role-based filtering
+    if (req.user.role === "volunteer") {
+      const ProgramMember = require("../models/ProgramMember");
+      const memberPrograms = await ProgramMember.find({
+        volunteer: req.user.userId,
+      }).distinct("program");
+      
+      filter.program = { $in: memberPrograms };
+      
+      // Volunteers can only see shifts from non-archived programs
+      const programs = await Program.find({
+        _id: { $in: memberPrograms },
+        archived: false,
+      }).distinct("_id");
+      
+      filter.program = { $in: programs };
+    }
+
+    // Program filter
+    if (programId) {
+      filter.program = programId;
+    }
+
+    // Date range filter
+    if (dateFrom || dateTo) {
+      filter.date = {};
+      if (dateFrom) filter.date.$gte = new Date(dateFrom);
+      if (dateTo) filter.date.$lte = new Date(dateTo);
+    }
+
+    // Search filter (program name or location)
+    if (search) {
+      const searchRegex = new RegExp(search, "i");
+      
+      // Get programs matching search
+      const matchingPrograms = await Program.find({
+        name: searchRegex,
+      }).distinct("_id");
+      
+      filter.$or = [
+        { program: { $in: matchingPrograms } },
+        { location: searchRegex },
+      ];
+    }
+
+    // Calculate pagination
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build sort
+    const sort = {};
+    sort[sortBy] = sortOrder === "desc" ? -1 : 1;
+
+    // Execute query
+    const shifts = await Shift.find(filter)
+      .populate("program", "name description archived")
+      .populate("createdBy", "name email")
+      .sort(sort)
+      .skip(skip)
+      .limit(limitNum);
+
+    // Get total count for pagination
+    const total = await Shift.countDocuments(filter);
+
+    // Calculate state for each shift
+    const shiftsWithState = await Promise.all(
+      shifts.map(async (shift) => {
+        const signupCount = await Signup.countDocuments({
+          shift: shift._id,
+          cancelledAt: null,
+        });
+
+        const shiftState = calculateShiftState(
+          signupCount,
+          shift.requiredHeadcount,
+          shift.closed
+        );
+
+        const shiftData = shift.toObject();
+        shiftData.state = shiftState;
+        shiftData.currentSignups = signupCount;
+
+        return shiftData;
+      })
+    );
+
+    // Filter by state if specified (client-side filtering for state)
+    let filteredShifts = shiftsWithState;
+    if (state) {
+      filteredShifts = shiftsWithState.filter((shift) => shift.state === state);
+    }
+
+    // Recalculate total after state filtering
+    const filteredTotal = state ? filteredShifts.length : total;
+    const totalPages = Math.ceil(filteredTotal / limitNum);
+
+    res.status(200).json({
+      items: filteredShifts,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: filteredTotal,
+        totalPages,
+      },
+    });
+  } catch (error) {
+    console.error("Get shifts error:", error);
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
 const getShiftById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -258,6 +389,7 @@ const closeShift = async (req, res) => {
 
 module.exports = {
   createShift,
+  getShifts,
   getShiftById,
   updateShift,
   deleteShift,

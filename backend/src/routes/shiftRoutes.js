@@ -2,6 +2,7 @@ const express = require("express");
 
 const {
   createShift,
+  getShifts,
   getShiftById,
   updateShift,
   deleteShift,
@@ -23,6 +24,7 @@ router.use(authenticate);
 
 // Shift CRUD
 router.post("/", authorize("coordinator"), createShift);
+router.get("/", getShifts);
 router.get("/:id", getShiftById);
 router.patch("/:id", authorize("coordinator"), updateShift);
 router.delete("/:id", authorize("coordinator"), deleteShift);
